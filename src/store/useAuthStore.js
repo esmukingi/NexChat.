@@ -16,12 +16,7 @@ export const useAuthStore = create((set, get) => ({
   onlineUsers: [],
   socket: null,
 
-  // Initialize axios interceptors
   initialize: () => {
-    // Remove token from localStorage as we're using cookies
-    localStorage.removeItem('token');
-    
-    // Response interceptor to handle 401 errors
     axiosInstance.interceptors.response.use(
       response => response,
       error => {
@@ -101,16 +96,18 @@ export const useAuthStore = create((set, get) => ({
     const { authUser } = get();
     if (!authUser || get().socket?.connected) return;
     
+    const isProduction = import.meta.env.MODE === "production";
+    
     const socket = io(BASE_URL, {
-      withCredentials: true, // This sends cookies
+      withCredentials: true,
+      secure: isProduction,
+      transports: ['websocket'],
+      auth: {
+        token: localStorage.getItem('token') // Fallback
+      },
       query: {
         userId: authUser._id
-      },
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      transports: ['websocket', 'polling']
+      }
     });
 
     socket.on('connect', () => {
@@ -120,16 +117,12 @@ export const useAuthStore = create((set, get) => ({
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err.message);
       if (err.message.includes('Authentication error')) {
-        socket.connect(); // Try to reconnect
+        socket.connect();
       }
     });
 
     socket.on('getOnlineUsers', (userIds) => {
       set({ onlineUsers: userIds });
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
     });
 
     set({ socket });
@@ -138,10 +131,6 @@ export const useAuthStore = create((set, get) => ({
   disconnectSocket: () => {
     const socket = get().socket;
     if (socket) {
-      socket.off('connect');
-      socket.off('connect_error');
-      socket.off('getOnlineUsers');
-      socket.off('disconnect');
       socket.disconnect();
     }
     set({ socket: null, onlineUsers: [] });

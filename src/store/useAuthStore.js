@@ -18,15 +18,9 @@ export const useAuthStore = create((set, get) => ({
 
   // Initialize axios interceptors
   initialize: () => {
-    // Request interceptor to add token
-    axiosInstance.interceptors.request.use(config => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-      return config;
-    });
-
+    // Remove token from localStorage as we're using cookies
+    localStorage.removeItem('token');
+    
     // Response interceptor to handle 401 errors
     axiosInstance.interceptors.response.use(
       response => response,
@@ -40,16 +34,17 @@ export const useAuthStore = create((set, get) => ({
   },
 
   handleUnauthorized: () => {
-    localStorage.removeItem('token');
     set({ authUser: null });
     get().disconnectSocket();
+    toast.error("Session expired. Please login again.");
   },
 
   checkAuth: async () => {
     try {
-      const res = await axiosInstance.get("/auth/check");
+      const res = await axiosInstance.get("/auth/check", {
+        withCredentials: true
+      });
       set({ authUser: res.data });
-      localStorage.setItem('token', res.data.token);
       get().connectSocket();
     } catch (error) {
       get().handleUnauthorized();
@@ -61,9 +56,10 @@ export const useAuthStore = create((set, get) => ({
   signup: async (data) => {
     set({ isSigningUp: true });
     try {
-      const res = await axiosInstance.post("/auth/signup", data);
+      const res = await axiosInstance.post("/auth/signup", data, {
+        withCredentials: true
+      });
       set({ authUser: res.data });
-      localStorage.setItem('token', res.data.token);
       toast.success("Account created successfully");
       get().connectSocket();
     } catch (error) {
@@ -76,9 +72,10 @@ export const useAuthStore = create((set, get) => ({
   login: async (data) => {
     set({ isLoggingIn: true });
     try {
-      const res = await axiosInstance.post("/auth/login", data);
+      const res = await axiosInstance.post("/auth/login", data, {
+        withCredentials: true
+      });
       set({ authUser: res.data });
-      localStorage.setItem('token', res.data.token);
       toast.success("Logged in successfully");
       get().connectSocket();
     } catch (error) {
@@ -90,24 +87,13 @@ export const useAuthStore = create((set, get) => ({
 
   logout: async () => {
     try {
-      await axiosInstance.post("/auth/logout");
+      await axiosInstance.post("/auth/logout", {}, {
+        withCredentials: true
+      });
       get().handleUnauthorized();
       toast.success("Logged out successfully");
     } catch (error) {
       toast.error(error.response?.data?.message || "Logout failed");
-    }
-  },
-
-  updateProfile: async (data) => {
-    set({ isUpdatingProfile: true });
-    try {
-      const res = await axiosInstance.put("/auth/update-profile", data);
-      set({ authUser: res.data });
-      toast.success("Profile updated successfully");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Update failed");
-    } finally {
-      set({ isUpdatingProfile: false });
     }
   },
 
@@ -116,9 +102,7 @@ export const useAuthStore = create((set, get) => ({
     if (!authUser || get().socket?.connected) return;
     
     const socket = io(BASE_URL, {
-      auth: {
-        token: localStorage.getItem('token')
-      },
+      withCredentials: true, // This sends cookies
       query: {
         userId: authUser._id
       },
@@ -126,7 +110,7 @@ export const useAuthStore = create((set, get) => ({
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
-      transports: ['websocket', 'polling'] // Enable both transports
+      transports: ['websocket', 'polling']
     });
 
     socket.on('connect', () => {
@@ -135,10 +119,8 @@ export const useAuthStore = create((set, get) => ({
 
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err.message);
-      // Try to reconnect with fresh token if error is auth-related
       if (err.message.includes('Authentication error')) {
-        socket.auth.token = localStorage.getItem('token');
-        socket.connect();
+        socket.connect(); // Try to reconnect
       }
     });
 

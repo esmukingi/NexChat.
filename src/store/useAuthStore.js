@@ -12,14 +12,14 @@ export const useAuthStore = create((set, get) => ({
   isSigningUp: false,
   isLoggingIn: false,
   isUpdatingProfile: false,
-  isCheckingAuth: true,
+  isCheckingAuth: false,
   onlineUsers: [],
   socket: null,
 
   initialize: () => {
     axiosInstance.interceptors.request.use(config => {
       config.withCredentials = true;
-      console.log('Request URL:', config.url);
+      console.log('Request URL:', config.url, 'Cookies sent:', document.cookie);
       return config;
     });
 
@@ -28,7 +28,7 @@ export const useAuthStore = create((set, get) => ({
       async error => {
         if (error.response?.status === 401) {
           console.log('401 error for URL:', error.config.url);
-          if (!['/auth/check', '/auth/login', '/auth/signup'].includes(error.config.url)) {
+          if (!['/auth/check', '/auth/login', '/auth/signup', '/messages/users'].includes(error.config.url)) {
             get().handleUnauthorized();
           }
         }
@@ -38,10 +38,6 @@ export const useAuthStore = create((set, get) => ({
   },
 
   checkAuth: async () => {
-    if (get().authUser) {
-      set({ isCheckingAuth: false });
-      return;
-    }
     set({ isCheckingAuth: true });
     try {
       const res = await axiosInstance.get('/auth/check');
@@ -50,9 +46,6 @@ export const useAuthStore = create((set, get) => ({
     } catch (error) {
       console.error('Check auth error:', error.response?.data || error.message);
       set({ authUser: null, isCheckingAuth: false });
-      if (error.response?.status !== 401) {
-        toast.error('Failed to verify session');
-      }
     }
   },
 
@@ -70,7 +63,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post('/auth/signup', data, {
         withCredentials: true,
       });
-      console.log('Signup response:', res.data, 'Cookies:', document.cookie);
+      console.log('Signup response:', res.data, 'Headers:', res.headers);
       set({ authUser: res.data });
       toast.success('Account created successfully');
       await get().checkAuth();
@@ -86,10 +79,11 @@ export const useAuthStore = create((set, get) => ({
   login: async (data) => {
     set({ isLoggingIn: true });
     try {
+      console.log('Login full URL:', `${axiosInstance.defaults.baseURL}/auth/login`);
       const res = await axiosInstance.post('/auth/login', data, {
         withCredentials: true,
       });
-      console.log('Login response:', res.data, 'Cookies:', document.cookie);
+      console.log('Login response:', res.data, 'Headers:', res.headers);
       set({ authUser: res.data });
       toast.success('Logged in successfully');
       await get().checkAuth();
@@ -114,20 +108,6 @@ export const useAuthStore = create((set, get) => ({
       toast.error(error.response?.data?.message || 'Logout failed');
     }
   },
-  updateProfile: async (data) => {
-    set({ isUpdatingProfile: true });
-    try {
-      const res = await axiosInstance.put("/auth/update-profile", data);
-      set({ authUser: res.data });
-      toast.success("Profile updated successfully");
-    } catch (error) {
-      console.log("error in update profile:", error);
-      toast.error(error.response.data.message);
-    } finally {
-      set({ isUpdatingProfile: false });
-    }
-  },
-
 
   connectSocket: () => {
     const { authUser } = get();

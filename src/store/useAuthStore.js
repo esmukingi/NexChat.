@@ -19,13 +19,14 @@ export const useAuthStore = create((set, get) => ({
   initialize: () => {
     axiosInstance.interceptors.request.use(config => {
       config.withCredentials = true;
+      console.log('Request URL:', config.url); // Debug log
       return config;
     });
   
     axiosInstance.interceptors.response.use(
       response => response,
-      error => {
-        if (error.response?.status === 401) {
+      async error => {
+        if (error.response?.status === 401 && error.config.url !== '/auth/check') {
           get().handleUnauthorized();
         }
         return Promise.reject(error);
@@ -33,17 +34,21 @@ export const useAuthStore = create((set, get) => ({
     );
   },
   
-  checkAuth: async () => {
-    if (get().authUser) return; // Skip if already authenticated
-    try {
-      const res = await axiosInstance.get('/auth/check');
-      set({ authUser: res.data, isCheckingAuth: false });
-      get().connectSocket();
-    } catch (error) {
-      set({ isCheckingAuth: false });
-      get().handleUnauthorized();
+  // useAuthStore.js
+checkAuth: async () => {
+  set({ isCheckingAuth: true });
+  try {
+    const res = await axiosInstance.get('/auth/check');
+    set({ authUser: res.data, isCheckingAuth: false });
+    get().connectSocket();
+  } catch (error) {
+    console.error('Check auth error:', error.message); // Debug log
+    set({ authUser: null, isCheckingAuth: false });
+    if (error.response?.status !== 401) {
+      toast.error('Failed to verify session');
     }
-  },
+  }
+},
   handleUnauthorized: () => {
     set({ authUser: null });
     get().disconnectSocket();
@@ -68,14 +73,16 @@ export const useAuthStore = create((set, get) => ({
   login: async (data) => {
     set({ isLoggingIn: true });
     try {
-      const res = await axiosInstance.post("/auth/login", data, {
-        withCredentials: true
+      const res = await axiosInstance.post('/auth/login', data, {
+        withCredentials: true,
       });
+      console.log('Login response:', res.data); // Debug log
       set({ authUser: res.data });
-      toast.success("Logged in successfully");
+      toast.success('Logged in successfully');
       get().connectSocket();
     } catch (error) {
-      toast.error(error.response?.data?.message || "Login failed");
+      console.error('Login error:', error.response?.data); // Debug log
+      toast.error(error.response?.data?.message || 'Login failed');
     } finally {
       set({ isLoggingIn: false });
     }

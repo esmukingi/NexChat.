@@ -19,7 +19,7 @@ export const useAuthStore = create((set, get) => ({
   initialize: () => {
     axiosInstance.interceptors.request.use(config => {
       config.withCredentials = true;
-      console.log('Request URL:', config.url, 'Cookies sent:', document.cookie);
+      console.log('Request URL:', config.url, 'Headers:', config.headers);
       return config;
     });
 

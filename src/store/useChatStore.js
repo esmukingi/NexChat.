@@ -11,15 +11,14 @@ export const useChatStore = create((set, get) => ({
   isMessagesLoading: false,
 
   getUsers: async () => {
-    set({ isUsersLoading: true });
     try {
-      const res = await axiosInstance.get("/messages/users");
+      const res = await axiosInstance.get('/messages/users', { withCredentials: true });
       set({ users: res.data });
     } catch (error) {
-      toast.error(error.response.data.message);
-      console.log(error);
-    } finally {
-      set({ isUsersLoading: false });
+      console.error('Get users error:', error.response?.data);
+      if (error.response?.status !== 401) {
+        toast.error('Failed to fetch users');
+      }
     }
   },
 

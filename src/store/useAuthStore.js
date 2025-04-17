@@ -18,7 +18,11 @@ export const useAuthStore = create((set, get) => ({
 
   initialize: () => {
     axiosInstance.interceptors.request.use(config => {
-      config.withCredentials = true;
+      const token = localStorage.getItem('token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+      config.withCredentials = true; // Keep for cookie fallback
       console.log('Request URL:', config.url, 'Headers:', config.headers);
       return config;
     });
@@ -26,11 +30,9 @@ export const useAuthStore = create((set, get) => ({
     axiosInstance.interceptors.response.use(
       response => response,
       async error => {
-        if (error.response?.status === 401) {
+        if (error.response?.status === 401 && !['/auth/check', '/auth/login', '/auth/signup'].includes(error.config.url)) {
           console.log('401 error for URL:', error.config.url);
-          if (!['/auth/check', '/auth/login', '/auth/signup', '/messages/users'].includes(error.config.url)) {
-            get().handleUnauthorized();
-          }
+          get().handleUnauthorized();
         }
         return Promise.reject(error);
       }
@@ -41,6 +43,7 @@ export const useAuthStore = create((set, get) => ({
     set({ isCheckingAuth: true });
     try {
       const res = await axiosInstance.get('/auth/check');
+      console.log('Check auth response:', res.data, 'Headers:', res.headers);
       set({ authUser: res.data, isCheckingAuth: false });
       get().connectSocket();
     } catch (error) {
@@ -53,6 +56,7 @@ export const useAuthStore = create((set, get) => ({
     const { authUser } = get();
     if (!authUser) return;
     set({ authUser: null });
+    localStorage.removeItem('token');
     get().disconnectSocket();
     toast.error('Session expired. Please login again.', { id: 'session-expired' });
   },
@@ -64,6 +68,7 @@ export const useAuthStore = create((set, get) => ({
         withCredentials: true,
       });
       console.log('Signup response:', res.data, 'Headers:', res.headers);
+      localStorage.setItem('token', res.data.token);
       set({ authUser: res.data });
       toast.success('Account created successfully');
       await get().checkAuth();
@@ -83,7 +88,8 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post('/auth/login', data, {
         withCredentials: true,
       });
-      console.log('Login response:', res.data, 'Headers:', res.headers);
+      console.log('Login response:', res.data, 'Headers:', res.headers, 'Cookies:', document.cookie);
+      localStorage.setItem('token', res.data.token);
       set({ authUser: res.data });
       toast.success('Logged in successfully');
       await get().checkAuth();
@@ -114,6 +120,7 @@ export const useAuthStore = create((set, get) => ({
     if (!authUser || get().socket?.connected) return;
 
     const isProduction = import.meta.env.MODE === 'production';
+    const token = localStorage.getItem('token');
 
     const socket = io(BASE_URL, {
       withCredentials: true,
@@ -125,6 +132,7 @@ export const useAuthStore = create((set, get) => ({
       query: {
         userId: authUser._id,
       },
+      extraHeaders: token ? { Authorization: `Bearer ${token}` } : {},
     });
 
     socket.on('connect', () => {

@@ -17,6 +17,11 @@ export const useAuthStore = create((set, get) => ({
   socket: null,
 
   initialize: () => {
+    axiosInstance.interceptors.request.use(config => {
+      config.withCredentials = true;
+      return config;
+    });
+  
     axiosInstance.interceptors.response.use(
       response => response,
       error => {
@@ -27,27 +32,21 @@ export const useAuthStore = create((set, get) => ({
       }
     );
   },
-
+  
+  checkAuth: async () => {
+    try {
+      const res = await axiosInstance.get("/auth/check"); // Note /api prefix
+      set({ authUser: res.data });
+      get().connectSocket();
+    } catch (error) {
+      get().handleUnauthorized();
+    }
+  },
   handleUnauthorized: () => {
     set({ authUser: null });
     get().disconnectSocket();
     toast.error("Session expired. Please login again.");
   },
-
-  checkAuth: async () => {
-    try {
-      const res = await axiosInstance.get("/auth/check", {
-        withCredentials: true
-      });
-      set({ authUser: res.data });
-      get().connectSocket();
-    } catch (error) {
-      get().handleUnauthorized();
-    } finally {
-      set({ isCheckingAuth: false });
-    }
-  },
-
   signup: async (data) => {
     set({ isSigningUp: true });
     try {

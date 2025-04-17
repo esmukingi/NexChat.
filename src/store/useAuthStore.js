@@ -34,11 +34,13 @@ export const useAuthStore = create((set, get) => ({
   },
   
   checkAuth: async () => {
+    if (get().authUser) return; // Skip if already authenticated
     try {
-      const res = await axiosInstance.get("/auth/check"); // Note /api prefix
-      set({ authUser: res.data });
+      const res = await axiosInstance.get('/auth/check');
+      set({ authUser: res.data, isCheckingAuth: false });
       get().connectSocket();
     } catch (error) {
+      set({ isCheckingAuth: false });
       get().handleUnauthorized();
     }
   },
@@ -94,39 +96,32 @@ export const useAuthStore = create((set, get) => ({
   connectSocket: () => {
     const { authUser } = get();
     if (!authUser || get().socket?.connected) return;
-    
-    const isProduction = import.meta.env.MODE === "production";
-    
+  
+    const isProduction = import.meta.env.MODE === 'production';
+  
     const socket = io(BASE_URL, {
-      withCredentials: true,
+      withCredentials: true, // Send cookies automatically
       secure: isProduction,
       transports: ['websocket'],
-      auth: {
-        token: localStorage.getItem('token') // Fallback
-      },
       query: {
-        userId: authUser._id
-      }
+        userId: authUser._id,
+      },
     });
-
+  
     socket.on('connect', () => {
       console.log('Socket connected');
     });
-
+  
     socket.on('connect_error', (err) => {
       console.error('Socket connection error:', err.message);
-      if (err.message.includes('Authentication error')) {
-        socket.connect();
-      }
     });
-
+  
     socket.on('getOnlineUsers', (userIds) => {
       set({ onlineUsers: userIds });
     });
-
+  
     set({ socket });
   },
-
   disconnectSocket: () => {
     const socket = get().socket;
     if (socket) {

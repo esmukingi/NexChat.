@@ -16,6 +16,7 @@ const App = () => {
   useEffect(() => {
     const initializeAuth = async () => {
       await initialize();
+      await new Promise(resolve => setTimeout(resolve, 100)); // Small delay
       await checkAuth();
     };
     initializeAuth();
